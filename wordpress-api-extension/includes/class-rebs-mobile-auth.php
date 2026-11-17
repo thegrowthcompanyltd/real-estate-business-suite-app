@@ -2,7 +2,7 @@
 if (!defined('ABSPATH')) exit;
 
 /**
- * Token authentication for the mobile client.
+ * Token authentication and mobile account endpoints.
  *
  * Tokens are returned only once, stored as SHA-256 hashes, and expire after
  * 30 days. WordPress passwords and auth cookies are never exposed to the app.
@@ -10,6 +10,7 @@ if (!defined('ABSPATH')) exit;
 class REBS_Mobile_Auth {
     private const TOKEN_META_KEY = '_rebs_mobile_tokens';
     private const TOKEN_INDEX_OPTION = 'rebs_mobile_token_index';
+    private const SAVED_META_KEY = '_rebs_mobile_saved_properties';
     private const TOKEN_TTL = 2592000;
 
     public function __construct() {
@@ -30,6 +31,16 @@ class REBS_Mobile_Auth {
         register_rest_route('rebs/v1', '/auth/me', [
             'methods' => WP_REST_Server::READABLE,
             'callback' => [$this, 'me'],
+            'permission_callback' => [$this, 'authenticated_request'],
+        ]);
+        register_rest_route('rebs/v1', '/saved-properties', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'saved_properties'],
+            'permission_callback' => [$this, 'authenticated_request'],
+        ]);
+        register_rest_route('rebs/v1', '/saved-properties', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'update_saved_properties'],
             'permission_callback' => [$this, 'authenticated_request'],
         ]);
     }
@@ -82,8 +93,29 @@ class REBS_Mobile_Auth {
         return rest_ensure_response(['user' => $this->user_payload($user)]);
     }
 
+    public function saved_properties(WP_REST_Request $request) {
+        $user = $this->user_from_request($request);
+        if (!$user) return new WP_Error('invalid_token', 'Your session is invalid or expired.', ['status' => 401]);
+        return rest_ensure_response(['property_ids' => $this->saved_ids_for($user->ID)]);
+    }
+
+    public function update_saved_properties(WP_REST_Request $request) {
+        $user = $this->user_from_request($request);
+        if (!$user) return new WP_Error('invalid_token', 'Your session is invalid or expired.', ['status' => 401]);
+        $raw_ids = $request->get_param('property_ids');
+        if (!is_array($raw_ids)) return new WP_Error('invalid_saved_properties', 'property_ids must be an array.', ['status' => 400]);
+        $ids = array_values(array_unique(array_filter(array_map('absint', $raw_ids))));
+        update_user_meta($user->ID, self::SAVED_META_KEY, $ids);
+        return rest_ensure_response(['property_ids' => $ids]);
+    }
+
     public function authenticated_request(WP_REST_Request $request) {
         return (bool) $this->user_from_request($request);
+    }
+
+    private function saved_ids_for($user_id) {
+        $saved = get_user_meta($user_id, self::SAVED_META_KEY, true);
+        return array_values(array_unique(array_filter(array_map('absint', is_array($saved) ? $saved : []))));
     }
 
     private function issue_session(WP_User $user) {
