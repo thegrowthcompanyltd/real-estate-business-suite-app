@@ -5,6 +5,7 @@ import 'screens/property_feed_page.dart';
 import 'screens/saved_properties_page.dart';
 import 'services/auth_api.dart';
 import 'services/auth_session_store.dart';
+import 'services/rebs_api_client.dart';
 import 'services/saved_properties_store.dart';
 
 void main() => runApp(const RealEstateBusinessSuiteApp());
@@ -44,12 +45,34 @@ class _AppShellState extends State<AppShell> {
   Future<void> initialise() async {
     final saved = await savedStore.load();
     final restoredSession = await sessionStore.load();
+    savedIds.addAll(saved);
+    if (restoredSession != null) await syncSavedProperties(restoredSession);
     if (!mounted) return;
     setState(() {
-      savedIds.addAll(saved);
       session = restoredSession;
       ready = true;
     });
+  }
+
+  Future<void> syncSavedProperties(AuthSession activeSession) async {
+    try {
+      final client = RebsApiClient(token: activeSession.token);
+      final remoteIds = await client.fetchSavedPropertyIds();
+      final mergedIds = {...savedIds, ...remoteIds};
+      savedIds
+        ..clear()
+        ..addAll(mergedIds);
+      await savedStore.save(savedIds);
+      await client.updateSavedPropertyIds(savedIds);
+    } on RebsApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await sessionStore.clear();
+        session = null;
+      }
+      // Local saved properties remain available if account synchronization fails.
+    } catch (_) {
+      // Local saved properties remain available when the network is unavailable.
+    }
   }
 
   Future<void> toggleSaved(int propertyId) async {
@@ -57,12 +80,28 @@ class _AppShellState extends State<AppShell> {
       if (!savedIds.add(propertyId)) savedIds.remove(propertyId);
     });
     await savedStore.save(savedIds);
+    final activeSession = session;
+    if (activeSession == null) return;
+    try {
+      final synced = await RebsApiClient(token: activeSession.token).updateSavedPropertyIds(savedIds);
+      if (!mounted) return;
+      setState(() {
+        savedIds
+          ..clear()
+          ..addAll(synced);
+      });
+      await savedStore.save(savedIds);
+    } catch (_) {
+      // Keep the optimistic local change; it will be retried at next startup.
+    }
   }
 
   Future<void> handleAuthenticated(AuthSession value) async {
     await sessionStore.save(value);
+    session = value;
+    await syncSavedProperties(value);
     if (!mounted) return;
-    setState(() => session = value);
+    setState(() {});
   }
 
   Future<void> signOut() async {
