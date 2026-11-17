@@ -9,6 +9,7 @@ if (!defined('ABSPATH')) exit;
  */
 class REBS_Mobile_Auth {
     private const TOKEN_META_KEY = '_rebs_mobile_tokens';
+    private const TOKEN_INDEX_OPTION = 'rebs_mobile_token_index';
     private const TOKEN_TTL = 2592000;
 
     public function __construct() {
@@ -46,35 +47,21 @@ class REBS_Mobile_Auth {
     }
 
     public function register(WP_REST_Request $request) {
-        if (!(int) get_option('rebs_registration_enabled', 1)) {
-            return new WP_Error('registration_disabled', 'Registration is currently closed.', ['status' => 403]);
-        }
+        if (!(int) get_option('rebs_registration_enabled', 1)) return new WP_Error('registration_disabled', 'Registration is currently closed.', ['status' => 403]);
 
         $name = sanitize_text_field((string) $request->get_param('name'));
         $email = sanitize_email((string) $request->get_param('email'));
         $password = (string) $request->get_param('password');
         $plan = sanitize_key((string) $request->get_param('plan'));
-        if (!$name || !is_email($email) || strlen($password) < 12) {
-            return new WP_Error('invalid_registration', 'Name, valid email, and a password of at least 12 characters are required.', ['status' => 400]);
-        }
+        if (!$name || !is_email($email) || strlen($password) < 12) return new WP_Error('invalid_registration', 'Name, valid email, and a password of at least 12 characters are required.', ['status' => 400]);
         if (email_exists($email)) return new WP_Error('email_exists', 'An account already exists for this email.', ['status' => 409]);
 
         $plans = class_exists('REBS_Billing') ? REBS_Billing::instance()->plans() : [];
-        if ($plans) {
-            if (!$plan || empty($plans[$plan]) || empty($plans[$plan]['enabled'])) {
-                return new WP_Error('plan_required', 'Select an available subscription plan.', ['status' => 400]);
-            }
-        }
+        if ($plans && (!$plan || empty($plans[$plan]) || empty($plans[$plan]['enabled']))) return new WP_Error('plan_required', 'Select an available subscription plan.', ['status' => 400]);
 
         $username = sanitize_user(strtok($email, '@'), true);
         if (!$username || username_exists($username)) $username = 'rebs_' . wp_generate_password(8, false, false);
-        $user_id = wp_insert_user([
-            'user_login' => $username,
-            'user_pass' => $password,
-            'user_email' => $email,
-            'display_name' => $name,
-            'role' => 'rebs_manager',
-        ]);
+        $user_id = wp_insert_user(['user_login' => $username, 'user_pass' => $password, 'user_email' => $email, 'display_name' => $name, 'role' => 'rebs_manager']);
         if (is_wp_error($user_id)) return new WP_Error('registration_failed', $user_id->get_error_message(), ['status' => 400]);
 
         update_user_meta($user_id, 'rebs_re_customer', '1');
@@ -100,37 +87,35 @@ class REBS_Mobile_Auth {
     }
 
     private function issue_session(WP_User $user) {
+        $now = time();
         $raw = 'rebs_' . bin2hex(random_bytes(32));
-        $tokens = $this->tokens_for($user->ID);
-        $tokens[] = ['hash' => hash('sha256', $raw), 'expires' => time() + self::TOKEN_TTL];
-        update_user_meta($user->ID, self::TOKEN_META_KEY, array_slice($tokens, -5));
-        return ['token' => $raw, 'expires_at' => gmdate('c', time() + self::TOKEN_TTL), 'user' => $this->user_payload($user)];
+        $record = ['user_id' => (int) $user->ID, 'hash' => hash('sha256', $raw), 'expires' => $now + self::TOKEN_TTL];
+        $user_tokens = array_values(array_filter($this->tokens_for($user->ID), function ($token) use ($now) { return !empty($token['expires']) && (int) $token['expires'] > $now; }));
+        $user_tokens[] = $record;
+        update_user_meta($user->ID, self::TOKEN_META_KEY, array_slice($user_tokens, -5));
+
+        $index = array_values(array_filter($this->tokens_for(0), function ($token) use ($now) { return !empty($token['expires']) && (int) $token['expires'] > $now; }));
+        $index[] = $record;
+        update_option(self::TOKEN_INDEX_OPTION, array_slice($index, -500), false);
+        return ['token' => $raw, 'expires_at' => gmdate('c', $now + self::TOKEN_TTL), 'user' => $this->user_payload($user)];
     }
 
     private function user_from_request(WP_REST_Request $request) {
         $header = (string) $request->get_header('authorization');
-        if (!preg_match('/^Bearer\\s+(.+)$/i', $header, $matches)) return null;
+        if (!preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) return null;
         $presented = trim($matches[1]);
         if (!$presented) return null;
         $hash = hash('sha256', $presented);
-        foreach ($this->tokens_for(0, $request) as $token) {
-            if (!empty($token['hash']) && !empty($token['expires']) && (int) $token['expires'] > time() && hash_equals($token['hash'], $hash)) {
-                $user_id = (int) ($token['user_id'] ?? 0);
-                if ($user_id) return get_user_by('id', $user_id);
-            }
+        foreach ($this->tokens_for(0) as $token) {
+            if (!empty($token['hash']) && !empty($token['expires']) && (int) $token['expires'] > time() && hash_equals($token['hash'], $hash)) return get_user_by('id', (int) ($token['user_id'] ?? 0));
         }
         return null;
     }
 
-    private function tokens_for($user_id, $request = null) {
-        if ($user_id) {
-            $tokens = get_user_meta($user_id, self::TOKEN_META_KEY, true);
-            return is_array($tokens) ? $tokens : [];
-        }
-        // Token records are indexed by user ID in the option to make bearer
-        // verification possible without accepting the user ID from the client.
-        $index = get_option('rebs_mobile_token_index', []);
-        return is_array($index) ? $index : [];
+    private function tokens_for($user_id) {
+        $key = $user_id ? self::TOKEN_META_KEY : self::TOKEN_INDEX_OPTION;
+        $tokens = $user_id ? get_user_meta($user_id, $key, true) : get_option($key, []);
+        return is_array($tokens) ? $tokens : [];
     }
 
     private function is_blocked($user_id) {
