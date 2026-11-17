@@ -7,6 +7,7 @@ class AppConfig {
   static const authLoginPath = '/wp-json/rebs/v1/auth/login';
   static const authRegisterPath = '/wp-json/rebs/v1/auth/register';
   static const authMePath = '/wp-json/rebs/v1/auth/me';
+  static const savedPropertiesPath = '/wp-json/rebs/v1/saved-properties';
 
   static Uri endpoint(String path) => Uri.parse('$wordpressBaseUrl$path');
 }
