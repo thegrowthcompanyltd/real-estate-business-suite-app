@@ -1,29 +1,33 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'auth_api.dart';
 
 class AuthSessionStore {
+  AuthSessionStore({FlutterSecureStorage? storage}) : _storage = storage ?? const FlutterSecureStorage();
+
   static const _key = 'rebs_auth_session';
+  final FlutterSecureStorage _storage;
 
   Future<void> save(AuthSession session) async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_key, jsonEncode({
-      'token': session.token,
-      'expires_at': session.expiresAt?.toIso8601String(),
-      'user': {
-        'id': session.user.id,
-        'email': session.user.email,
-        'name': session.user.name,
-        'role': session.user.role,
-      },
-    }));
+    await _storage.write(
+      key: _key,
+      value: jsonEncode({
+        'token': session.token,
+        'expires_at': session.expiresAt?.toIso8601String(),
+        'user': {
+          'id': session.user.id,
+          'email': session.user.email,
+          'name': session.user.name,
+          'role': session.user.role,
+        },
+      }),
+    );
   }
 
   Future<AuthSession?> load() async {
-    final preferences = await SharedPreferences.getInstance();
-    final raw = preferences.getString(_key);
+    final raw = await _storage.read(key: _key);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -40,8 +44,5 @@ class AuthSessionStore {
     }
   }
 
-  Future<void> clear() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(_key);
-  }
+  Future<void> clear() => _storage.delete(key: _key);
 }
