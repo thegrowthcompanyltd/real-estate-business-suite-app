@@ -21,20 +21,23 @@ class AuthUser {
 }
 
 class AuthSession {
-  const AuthSession({required this.token, required this.user});
+  const AuthSession({required this.token, required this.user, this.expiresAt});
 
   final String token;
   final AuthUser user;
+  final DateTime? expiresAt;
 
   factory AuthSession.fromJson(Map<String, dynamic> json) => AuthSession(
         token: json['token'] as String? ?? '',
         user: AuthUser.fromJson((json['user'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        expiresAt: DateTime.tryParse(json['expires_at'] as String? ?? ''),
       );
 }
 
 class AuthApiException implements Exception {
-  const AuthApiException(this.message);
+  const AuthApiException(this.message, {this.statusCode});
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -53,31 +56,37 @@ class AuthApi {
           body: jsonEncode({'email': email.trim(), 'password': password}),
         )
         .timeout(const Duration(seconds: 20));
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AuthApiException('Login failed. Please check your details and try again.');
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) throw const AuthApiException('The login response was invalid.');
-    return AuthSession.fromJson(decoded.cast<String, dynamic>());
+    return _sessionFromResponse(response, fallback: 'Login failed. Please check your details and try again.');
   }
 
-  Future<AuthSession> register({required String name, required String email, required String password}) async {
+  Future<void> register({required String name, required String email, required String password, String? plan}) async {
     final response = await _client
         .post(
           AppConfig.endpoint(AppConfig.authRegisterPath),
           headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-          body: jsonEncode({'name': name.trim(), 'email': email.trim(), 'password': password}),
+          body: jsonEncode({'name': name.trim(), 'email': email.trim(), 'password': password, if (plan != null) 'plan': plan}),
         )
         .timeout(const Duration(seconds: 20));
+    if (response.statusCode < 200 || response.statusCode >= 300) throw _error(response, 'Registration failed. Please review your details and try again.');
+  }
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AuthApiException('Registration failed. Please review your details and try again.');
-    }
-
+  AuthSession _sessionFromResponse(http.Response response, {required String fallback}) {
+    if (response.statusCode < 200 || response.statusCode >= 300) throw _error(response, fallback);
     final decoded = jsonDecode(response.body);
-    if (decoded is! Map) throw const AuthApiException('The registration response was invalid.');
-    return AuthSession.fromJson(decoded.cast<String, dynamic>());
+    if (decoded is! Map) throw const AuthApiException('The authentication response was invalid.');
+    final session = AuthSession.fromJson(decoded.cast<String, dynamic>());
+    if (session.token.isEmpty) throw const AuthApiException('The authentication response did not include a session token.');
+    return session;
+  }
+
+  AuthApiException _error(http.Response response, String fallback) {
+    var message = fallback;
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map && decoded['message'] is String) message = decoded['message'] as String;
+    } catch (_) {
+      // Keep the safe fallback for non-JSON responses.
+    }
+    return AuthApiException(message, statusCode: response.statusCode);
   }
 }
