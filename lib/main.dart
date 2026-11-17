@@ -136,7 +136,7 @@ class _AppShellState extends State<AppShell> {
 class AccountPage extends StatelessWidget {
   const AccountPage({required this.session, required this.onSignOut, super.key});
   final AuthSession session;
-  final VoidCallback onSignOut;
+  final Future<void> Function() onSignOut;
 
   @override
   Widget build(BuildContext context) => Scaffold(
