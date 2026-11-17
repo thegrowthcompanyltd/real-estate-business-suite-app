@@ -19,8 +19,10 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   final email = TextEditingController();
   final phone = TextEditingController();
   final message = TextEditingController();
+  final galleryController = PageController();
   bool busy = false;
   String? feedback;
+  int galleryIndex = 0;
 
   @override
   void dispose() {
@@ -28,6 +30,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     email.dispose();
     phone.dispose();
     message.dispose();
+    galleryController.dispose();
     super.dispose();
   }
 
@@ -59,16 +62,43 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     }
   }
 
+  List<String> get gallery {
+    final images = <String>[];
+    if (widget.property.image != null) images.add(widget.property.image!);
+    for (final image in widget.property.gallery) {
+      if (image.isNotEmpty && !images.contains(image)) images.add(image);
+    }
+    return images;
+  }
+
   @override
   Widget build(BuildContext context) {
     final property = widget.property;
+    final images = gallery;
     return Scaffold(
       appBar: AppBar(title: const Text('Property details')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (property.image != null)
-            ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(property.image!, height: 220, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 100, child: Icon(Icons.broken_image))))
+          if (images.isNotEmpty)
+            Column(children: [
+              SizedBox(
+                height: 230,
+                child: PageView.builder(
+                  controller: galleryController,
+                  itemCount: images.length,
+                  onPageChanged: (value) => setState(() => galleryIndex = value),
+                  itemBuilder: (_, index) => ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(images[index], fit: BoxFit.cover, width: double.infinity, errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image))),
+                  ),
+                ),
+              ),
+              if (images.length > 1) ...[
+                const SizedBox(height: 8),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(images.length, (index) => Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: Icon(Icons.circle, size: 9, color: index == galleryIndex ? Theme.of(context).colorScheme.primary : Colors.grey.shade400)))),
+              ],
+            ])
           else
             const SizedBox(height: 120, child: Icon(Icons.apartment, size: 72)),
           const SizedBox(height: 16),
