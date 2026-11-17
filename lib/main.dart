@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/login_page.dart';
 import 'screens/property_feed_page.dart';
+import 'screens/saved_properties_page.dart';
 import 'services/auth_api.dart';
 import 'services/auth_session_store.dart';
 import 'services/saved_properties_store.dart';
@@ -75,7 +76,7 @@ class _AppShellState extends State<AppShell> {
     if (!ready) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final pages = <Widget>[
       PropertyFeedPage(session: session, savedIds: savedIds, onToggleSaved: toggleSaved),
-      SavedPropertiesPage(savedIds: savedIds, onToggleSaved: toggleSaved),
+      SavedPropertiesPage(savedIds: savedIds, onToggleSaved: toggleSaved, session: session),
       session == null ? LoginPage(onAuthenticated: handleAuthenticated) : AccountPage(session: session!, onSignOut: signOut),
     ];
     return Scaffold(
@@ -91,27 +92,6 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
-}
-
-class SavedPropertiesPage extends StatelessWidget {
-  const SavedPropertiesPage({required this.savedIds, required this.onToggleSaved, super.key});
-  final Set<int> savedIds;
-  final ValueChanged<int> onToggleSaved;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Saved properties')),
-        body: savedIds.isEmpty
-            ? const Center(child: Text('No saved properties yet.'))
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  const Text('Saved properties are stored on this device. Account synchronization will be added with the saved-search API.'),
-                  const SizedBox(height: 12),
-                  for (final id in savedIds) Card(child: ListTile(title: Text('Property #$id'), trailing: IconButton(icon: const Icon(Icons.bookmark), onPressed: () => onToggleSaved(id)))),
-                ],
-              ),
-      );
 }
 
 class AccountPage extends StatelessWidget {
