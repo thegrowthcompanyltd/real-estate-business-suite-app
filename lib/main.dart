@@ -4,6 +4,7 @@ import 'screens/login_page.dart';
 import 'screens/property_feed_page.dart';
 import 'services/auth_api.dart';
 import 'services/property_api.dart';
+import 'services/saved_properties_store.dart';
 
 void main() => runApp(const RealEstateBusinessSuiteApp());
 
@@ -13,10 +14,7 @@ class RealEstateBusinessSuiteApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Real Estate Business Suite',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A5F)),
-          useMaterial3: true,
-        ),
+        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A5F)), useMaterial3: true),
         home: const AppShell(),
       );
 }
@@ -32,23 +30,39 @@ class _AppShellState extends State<AppShell> {
   int index = 0;
   AuthSession? session;
   final savedIds = <int>{};
+  final savedStore = SavedPropertiesStore();
+  bool savedLoaded = false;
 
-  void toggleSaved(int propertyId) {
+  @override
+  void initState() {
+    super.initState();
+    loadSavedProperties();
+  }
+
+  Future<void> loadSavedProperties() async {
+    final ids = await savedStore.load();
+    if (!mounted) return;
+    setState(() {
+      savedIds.addAll(ids);
+      savedLoaded = true;
+    });
+  }
+
+  Future<void> toggleSaved(int propertyId) async {
     setState(() {
       if (!savedIds.add(propertyId)) savedIds.remove(propertyId);
     });
+    await savedStore.save(savedIds);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!savedLoaded) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final pages = <Widget>[
       PropertyFeedPage(session: session, savedIds: savedIds, onToggleSaved: toggleSaved),
       SavedPropertiesPage(savedIds: savedIds, onToggleSaved: toggleSaved),
-      session == null
-          ? LoginPage(onAuthenticated: (value) => setState(() => session = value))
-          : AccountPage(session: session!, onSignOut: () => setState(() => session = null)),
+      session == null ? LoginPage(onAuthenticated: (value) => setState(() => session = value)) : AccountPage(session: session!, onSignOut: () => setState(() => session = null)),
     ];
-
     return Scaffold(
       body: pages[index],
       bottomNavigationBar: NavigationBar(
@@ -77,10 +91,9 @@ class SavedPropertiesPage extends StatelessWidget {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Text('Saved listing IDs are held for this app session. Account sync will be added with the saved-search API.'),
+                  const Text('Saved properties are stored on this device. Account synchronization will be added with the saved-search API.'),
                   const SizedBox(height: 12),
-                  for (final id in savedIds)
-                    Card(child: ListTile(title: Text('Property #$id'), trailing: IconButton(icon: const Icon(Icons.bookmark), onPressed: () => onToggleSaved(id)))),
+                  for (final id in savedIds) Card(child: ListTile(title: Text('Property #$id'), trailing: IconButton(icon: const Icon(Icons.bookmark), onPressed: () => onToggleSaved(id)))),
                 ],
               ),
       );
