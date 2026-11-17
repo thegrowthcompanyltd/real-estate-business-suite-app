@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/login_page.dart';
 import 'screens/property_feed_page.dart';
 import 'services/auth_api.dart';
-import 'services/property_api.dart';
+import 'services/auth_session_store.dart';
 import 'services/saved_properties_store.dart';
 
 void main() => runApp(const RealEstateBusinessSuiteApp());
@@ -31,20 +31,23 @@ class _AppShellState extends State<AppShell> {
   AuthSession? session;
   final savedIds = <int>{};
   final savedStore = SavedPropertiesStore();
-  bool savedLoaded = false;
+  final sessionStore = AuthSessionStore();
+  bool ready = false;
 
   @override
   void initState() {
     super.initState();
-    loadSavedProperties();
+    initialise();
   }
 
-  Future<void> loadSavedProperties() async {
-    final ids = await savedStore.load();
+  Future<void> initialise() async {
+    final saved = await savedStore.load();
+    final restoredSession = await sessionStore.load();
     if (!mounted) return;
     setState(() {
-      savedIds.addAll(ids);
-      savedLoaded = true;
+      savedIds.addAll(saved);
+      session = restoredSession;
+      ready = true;
     });
   }
 
@@ -55,13 +58,25 @@ class _AppShellState extends State<AppShell> {
     await savedStore.save(savedIds);
   }
 
+  Future<void> handleAuthenticated(AuthSession value) async {
+    await sessionStore.save(value);
+    if (!mounted) return;
+    setState(() => session = value);
+  }
+
+  Future<void> signOut() async {
+    await sessionStore.clear();
+    if (!mounted) return;
+    setState(() => session = null);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!savedLoaded) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (!ready) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final pages = <Widget>[
       PropertyFeedPage(session: session, savedIds: savedIds, onToggleSaved: toggleSaved),
       SavedPropertiesPage(savedIds: savedIds, onToggleSaved: toggleSaved),
-      session == null ? LoginPage(onAuthenticated: (value) => setState(() => session = value)) : AccountPage(session: session!, onSignOut: () => setState(() => session = null)),
+      session == null ? LoginPage(onAuthenticated: handleAuthenticated) : AccountPage(session: session!, onSignOut: signOut),
     ];
     return Scaffold(
       body: pages[index],
