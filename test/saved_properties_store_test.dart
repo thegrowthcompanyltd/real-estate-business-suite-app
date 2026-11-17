@@ -18,11 +18,22 @@ void main() {
     expect(await store.load(), {9, 3});
   });
 
-  test('ignores malformed saved IDs', () async {
+  test('isolates saved IDs by user', () async {
+    final store = SavedPropertiesStore();
+
+    await store.save({12}, userId: 4);
+    await store.save({21}, userId: 7);
+
+    expect(await store.load(userId: 4), {12});
+    expect(await store.load(userId: 7), {21});
+    expect(await store.load(), isEmpty);
+  });
+
+  test('ignores malformed and non-positive saved IDs', () async {
     SharedPreferences.setMockInitialValues({
-      'rebs_saved_property_ids': ['12', 'invalid', '7'],
+      'rebs_saved_property_ids.user.4': ['12', 'invalid', '0', '-7'],
     });
 
-    expect(await SavedPropertiesStore().load(), {12, 7});
+    expect(await SavedPropertiesStore().load(userId: 4), {12});
   });
 }
