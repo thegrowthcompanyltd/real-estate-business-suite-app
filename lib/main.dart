@@ -44,9 +44,9 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> initialise() async {
     final saved = await savedStore.load();
-    final restoredSession = await sessionStore.load();
+    AuthSession? restoredSession = await sessionStore.load();
     savedIds.addAll(saved);
-    if (restoredSession != null) await syncSavedProperties(restoredSession);
+    if (restoredSession != null && !await syncSavedProperties(restoredSession)) restoredSession = null;
     if (!mounted) return;
     setState(() {
       session = restoredSession;
@@ -54,7 +54,7 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  Future<void> syncSavedProperties(AuthSession activeSession) async {
+  Future<bool> syncSavedProperties(AuthSession activeSession) async {
     try {
       final client = RebsApiClient(token: activeSession.token);
       final remoteIds = await client.fetchSavedPropertyIds();
@@ -64,14 +64,17 @@ class _AppShellState extends State<AppShell> {
         ..addAll(mergedIds);
       await savedStore.save(savedIds);
       await client.updateSavedPropertyIds(savedIds);
+      return true;
     } on RebsApiException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403) {
         await sessionStore.clear();
         session = null;
+        return false;
       }
     } catch (_) {
       // Local saved properties remain available when the network is unavailable.
     }
+    return true;
   }
 
   Future<void> toggleSaved(int propertyId) async {
