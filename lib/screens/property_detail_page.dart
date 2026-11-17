@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_api.dart';
 import '../services/property_api.dart';
 import '../services/rebs_api_client.dart';
 
@@ -20,6 +21,15 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   final message = TextEditingController();
   bool busy = false;
   String? feedback;
+
+  @override
+  void dispose() {
+    name.dispose();
+    email.dispose();
+    phone.dispose();
+    message.dispose();
+    super.dispose();
+  }
 
   Future<void> submitInquiry() async {
     if (name.text.trim().isEmpty || email.text.trim().isEmpty) {
@@ -57,7 +67,10 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (property.image != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(property.image!, height: 220, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 100, child: Icon(Icons.broken_image)))) else const SizedBox(height: 120, child: Icon(Icons.apartment, size: 72)),
+          if (property.image != null)
+            ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(property.image!, height: 220, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 100, child: Icon(Icons.broken_image))))
+          else
+            const SizedBox(height: 120, child: Icon(Icons.apartment, size: 72)),
           const SizedBox(height: 16),
           Text(property.title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
@@ -82,7 +95,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
           TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone (optional)', border: OutlineInputBorder())),
           const SizedBox(height: 12),
           TextField(controller: message, maxLines: 4, decoration: const InputDecoration(labelText: 'Message (optional)', border: OutlineInputBorder())),
-          if (feedback != null) ...[const SizedBox(height: 12), Text(feedback!, style: TextStyle(color: Colors.blueGrey))],
+          if (feedback != null) ...[const SizedBox(height: 12), Text(feedback!, style: const TextStyle(color: Colors.blueGrey))],
           const SizedBox(height: 16),
           FilledButton(onPressed: busy ? null : submitInquiry, child: Text(busy ? 'Sending…' : 'Send inquiry')),
         ],
