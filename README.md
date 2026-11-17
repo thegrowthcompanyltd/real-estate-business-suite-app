@@ -8,20 +8,31 @@ Cross-platform Flutter foundation for Android and iPhone, connected to the Real 
 
 ## Current foundation
 
-- Flutter application entry point
-- Material 3 theme
-- Property feed screen
+- Flutter application entry point with Material 3 navigation
+- Public property feed with loading, empty, error, retry, and refresh states
 - WordPress property API client
-- Loading, empty, error, and refresh states
-- Defensive response parsing and request timeout
+- Auth session models and token-based login/registration client
+- Authenticated account lookup and lead submission client
+- Saved-search navigation placeholder
+- Defensive response parsing and request timeout handling
+- WordPress mobile-auth extension source and installation guide
 
 ## Backend
 
-The current public property endpoint is:
+Public endpoint:
 
 `GET https://realtyeasy.sitesavvvy.com/wp-json/rebs/v1/properties`
 
-Authenticated API work will be added in a later phase. WordPress remains the system of record; app secrets must not be committed to this repository.
+Authenticated contracts:
+
+```text
+POST /wp-json/rebs/v1/auth/login
+POST /wp-json/rebs/v1/auth/register
+GET  /wp-json/rebs/v1/auth/me
+POST /wp-json/rebs/v1/leads
+```
+
+The auth extension is committed under `wordpress-api-extension/`, but it has not been installed on the live WordPress site. WordPress remains the system of record; app secrets must not be committed to this repository.
 
 ## Run locally
 
@@ -31,3 +42,13 @@ flutter analyze
 flutter test
 flutter run
 ```
+
+## Backend installation check
+
+After installing the PHP extension into the WordPress plugin, run:
+
+```bash
+php -l includes/class-rebs-mobile-auth.php
+```
+
+Then test the routes on staging before enabling mobile login.
