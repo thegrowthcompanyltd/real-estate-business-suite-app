@@ -46,7 +46,12 @@ class _AppShellState extends State<AppShell> {
     final saved = await savedStore.load();
     AuthSession? restoredSession = await sessionStore.load();
     savedIds.addAll(saved);
-    if (restoredSession != null && !await syncSavedProperties(restoredSession)) restoredSession = null;
+    if (restoredSession != null) {
+      savedIds
+        ..clear()
+        ..addAll(await savedStore.load(userId: restoredSession.user.id));
+      if (!await syncSavedProperties(restoredSession)) restoredSession = null;
+    }
     if (!mounted) return;
     setState(() {
       session = restoredSession;
@@ -62,7 +67,7 @@ class _AppShellState extends State<AppShell> {
       savedIds
         ..clear()
         ..addAll(mergedIds);
-      await savedStore.save(savedIds);
+      await savedStore.save(savedIds, userId: activeSession.user.id);
       await client.updateSavedPropertyIds(savedIds);
       return true;
     } on RebsApiException catch (error) {
@@ -81,8 +86,8 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       if (!savedIds.add(propertyId)) savedIds.remove(propertyId);
     });
-    await savedStore.save(savedIds);
     final activeSession = session;
+    await savedStore.save(savedIds, userId: activeSession?.user.id);
     if (activeSession == null) return;
     try {
       final synced = await RebsApiClient(token: activeSession.token).updateSavedPropertyIds(savedIds);
@@ -92,7 +97,7 @@ class _AppShellState extends State<AppShell> {
           ..clear()
           ..addAll(synced);
       });
-      await savedStore.save(savedIds);
+      await savedStore.save(savedIds, userId: activeSession.user.id);
     } catch (_) {
       // Keep the optimistic local change; it will be retried at next startup.
     }
@@ -100,6 +105,9 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> handleAuthenticated(AuthSession value) async {
     await sessionStore.save(value);
+    savedIds
+      ..clear()
+      ..addAll(await savedStore.load(userId: value.user.id));
     session = value;
     await syncSavedProperties(value);
     if (!mounted) return;
@@ -109,7 +117,10 @@ class _AppShellState extends State<AppShell> {
   Future<void> signOut() async {
     await sessionStore.clear();
     if (!mounted) return;
-    setState(() => session = null);
+    setState(() {
+      savedIds.clear();
+      session = null;
+    });
   }
 
   @override
