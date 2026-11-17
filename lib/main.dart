@@ -69,7 +69,6 @@ class _AppShellState extends State<AppShell> {
         await sessionStore.clear();
         session = null;
       }
-      // Local saved properties remain available if account synchronization fails.
     } catch (_) {
       // Local saved properties remain available when the network is unavailable.
     }
@@ -147,7 +146,7 @@ class AccountPage extends StatelessWidget {
             Text(session.user.name.isEmpty ? session.user.email : session.user.name, style: Theme.of(context).textTheme.headlineSmall),
             Text('${session.user.email} · ${session.user.role}'),
             const SizedBox(height: 24),
-            OutlinedButton(onPressed: onSignOut, child: const Text('Sign out')),
+            OutlinedButton(onPressed: () { onSignOut(); }, child: const Text('Sign out')),
           ],
         ),
       );
