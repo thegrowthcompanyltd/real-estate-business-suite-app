@@ -43,9 +43,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> initialise() async {
-    final saved = await savedStore.load();
+    final anonymousSaved = await savedStore.load();
     AuthSession? restoredSession = await sessionStore.load();
-    savedIds.addAll(saved);
+    savedIds.addAll(anonymousSaved);
     if (restoredSession != null) {
       savedIds
         ..clear()
@@ -104,10 +104,13 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> handleAuthenticated(AuthSession value) async {
+    final anonymousSaved = await savedStore.load();
+    final accountSaved = await savedStore.load(userId: value.user.id);
     await sessionStore.save(value);
     savedIds
       ..clear()
-      ..addAll(await savedStore.load(userId: value.user.id));
+      ..addAll({...anonymousSaved, ...accountSaved});
+    await savedStore.save(savedIds, userId: value.user.id);
     session = value;
     await syncSavedProperties(value);
     if (!mounted) return;
