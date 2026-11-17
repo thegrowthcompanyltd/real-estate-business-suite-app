@@ -10,12 +10,14 @@ Cross-platform Flutter foundation for Android and iPhone, connected to the Real 
 
 - Flutter application entry point with Material 3 navigation
 - Public property feed with loading, empty, error, retry, and refresh states
+- Property search, detail view, gallery-ready property model, and inquiry form
 - WordPress property API client
 - Auth session models and token-based login/registration client
+- Persistent platform-secure authentication sessions
+- Persistent local saved properties
 - Authenticated account lookup and lead submission client
-- Saved-search navigation placeholder
-- Defensive response parsing and request timeout handling
 - WordPress mobile-auth extension source and installation guide
+- Authentication client characterization tests
 
 ## Backend
 
@@ -33,6 +35,12 @@ POST /wp-json/rebs/v1/leads
 ```
 
 The auth extension is committed under `wordpress-api-extension/`, but it has not been installed on the live WordPress site. WordPress remains the system of record; app secrets must not be committed to this repository.
+
+## Local storage
+
+- Authentication tokens are stored with `flutter_secure_storage`, using Android Keystore and iOS Keychain-backed storage.
+- Saved property IDs are non-sensitive preferences and remain in `shared_preferences`.
+- Expired or malformed authentication sessions are deleted automatically.
 
 ## Run locally
 
