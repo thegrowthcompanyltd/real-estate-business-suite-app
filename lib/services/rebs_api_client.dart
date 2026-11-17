@@ -30,6 +30,28 @@ class RebsApiClient {
     return _decodeObject(response, fallback: 'Unable to load your account.');
   }
 
+  Future<Set<int>> fetchSavedPropertyIds() async {
+    final response = await _client.get(AppConfig.endpoint(AppConfig.savedPropertiesPath), headers: _headers).timeout(const Duration(seconds: 20));
+    final decoded = _decodeObject(response, fallback: 'Unable to load saved properties.');
+    final rawIds = decoded['property_ids'];
+    if (rawIds is! List) throw const RebsApiException('The saved-property response was invalid.');
+    return rawIds.map(_asInt).whereType<int>().where((id) => id > 0).toSet();
+  }
+
+  Future<Set<int>> updateSavedPropertyIds(Set<int> ids) async {
+    final response = await _client
+        .post(
+          AppConfig.endpoint(AppConfig.savedPropertiesPath),
+          headers: _headers,
+          body: jsonEncode({'property_ids': ids.where((id) => id > 0).toList(growable: false)}),
+        )
+        .timeout(const Duration(seconds: 20));
+    final decoded = _decodeObject(response, fallback: 'Unable to save your property list.');
+    final rawIds = decoded['property_ids'];
+    if (rawIds is! List) throw const RebsApiException('The saved-property response was invalid.');
+    return rawIds.map(_asInt).whereType<int>().where((id) => id > 0).toSet();
+  }
+
   Future<int> submitLead({required String name, required String email, int? propertyId, String? phone, String? message}) async {
     final body = <String, dynamic>{
       'name': name.trim(),
@@ -45,6 +67,8 @@ class RebsApiClient {
     if (id is num) return id.toInt();
     throw const RebsApiException('The inquiry response was invalid.');
   }
+
+  int? _asInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value');
 
   Map<String, dynamic> _decodeObject(http.Response response, {required String fallback}) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
